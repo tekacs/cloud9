@@ -39,7 +39,9 @@ module.exports = ext.register("ext/run/run", {
         dock.addDockable({
             hidden  : false,
             height  : 30,
-            width   : 179,
+            width   : 150,
+            noflex  : true,
+//            draggable: false,
             barNum  : 0,
             options : {
                 resizable  : false,
@@ -51,11 +53,13 @@ module.exports = ext.register("ext/run/run", {
                 id      : "btnRunCommands",
                 caption : "Run Commands", 
                 "class" : "btn-runcommands",
-                ext     : [name, "tbDebugNav"] 
+                ext     : [name, "pgDebugNav"],
+//                draggable: false,
+                hidden  : true
             }]
         });
         
-        dock.register(name, "tbDebugNav", {
+        dock.register(name, "pgDebugNav", {
             menu : "Run Commands",
             primary : {
                 backgroundImage: "/static/style/images/debugicons.png",
@@ -63,7 +67,7 @@ module.exports = ext.register("ext/run/run", {
                 activeState: { x: -6, y: -265 }
             }
         }, function(type) {
-            return tbDebugNav;
+            return pgDebugNav;
         });
         ext.initExtension(_self);
     },
@@ -152,8 +156,8 @@ module.exports = ext.register("ext/run/run", {
         }
         
         if(debug) {
-            var pos  = apf.getAbsolutePosition(btnRunCommands.$ext);
-            self[btnRunCommands.submenu].display(pos[0]-1, pos[1]-11, false, btnRunCommands)
+//            var pos  = apf.getAbsolutePosition(btnRunCommands.$ext);
+//            self[btnRunCommands.submenu].display(pos[0]-1, pos[1]-11, false, btnRunCommands)
         }
     },
 
@@ -196,8 +200,12 @@ module.exports = ext.register("ext/run/run", {
         var saveallbeforerun = model.queryValue("general/@saveallbeforerun");
         if(saveallbeforerun) save.saveall();
         
-        if (debug === undefined)
+        if (debug === undefined) {
             debug = config.parentNode.getAttribute("debug") == "1";
+        }
+        
+        if(debug)
+            dock.showSection(["ext/debugger/debugger", "ext/run/run"], true);
 
         config.parentNode.setAttribute("debug", "0");
         noderunner.run(config.getAttribute("path"), config.getAttribute("args").split(" "), debug);
@@ -205,8 +213,7 @@ module.exports = ext.register("ext/run/run", {
 
     stop : function() {
         noderunner.stop();
-        if(self['btnRunCommands'])
-            self[btnRunCommands.submenu].hide();
+        dock.hideSection(["ext/run/run", "ext/debugger/debugger"]);
     },
 
     enable : function(){
@@ -237,6 +244,7 @@ module.exports = ext.register("ext/run/run", {
             item.destroy(true, true);
         });
         this.nodes = [];
+        tbDebugNav.destroy(true, true);
     }
 });
 

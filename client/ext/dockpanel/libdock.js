@@ -22,7 +22,7 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
     this.$cbStorePage   = cbStorePage;
     this.$cbChange      = cbChange;
     this.$cbFindOptions = cbFindOptions;
-    
+    this.buttonEls      = [];
     var indicator = this.indicator = document.body.appendChild(document.createElement("div"));
     indicator.style.position = "absolute";
     indicator.style.display = "none";
@@ -38,14 +38,14 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
      * Retrieve the current state of the layout as a JSON object
      * 
      */
-    this.getState = function(){
-        var state = {bars: [], type: "new"};
+    this.getState = function(changed){
+        var state = {bars: [], type: "new_type"};
         
         var bar = this.$parentHBox.lastChild;
         while (bar) {
             if (bar.localName == "bar" && bar.dock) {
                 var barInfo = {sections: []};
-                barInfo.expanded = bar.vbox && bar.vbox.visible;
+                barInfo.expanded = bar.expanded || bar.vbox && bar.vbox.visible;
                 barInfo.width    = bar.vbox && bar.vbox.width 
                     || bar.$dockData && bar.$dockData.width 
                     || 200;
@@ -54,16 +54,21 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
                 for (var i = 0; i < sections.length; i++) {
                     var sectionInfo = {buttons: []};
                     var buttons = sections[i].selectNodes("button");
-                    sectionInfo.flex = buttons[0].$dockpage.parentNode.flex || false;
+                    sectionInfo.flex = buttons[0].$dockpage.parentNode && buttons[0].$dockpage.parentNode.flex || false;
                     
                     var menu = self[buttons[0].submenu];
                     sectionInfo.width = menu.width;
                     sectionInfo.height = menu.height;
                     sectionInfo.options = sections[i].$dockData.options;
+                    sectionInfo.draggable = sections[i].$dockData.draggable;
+                    sectionInfo.noflex = sections[i].$dockData.noflex;
+                    
                     for (var j = 0; j < buttons.length; j++) {
                         var buttonInfo = {};
                         buttonInfo.ext     = buttons[j].$dockData.ext;
                         buttonInfo.caption = buttons[j].$dockpage.caption;
+                        buttonInfo.hidden  = buttons[j].$dockData.hidden;
+                        buttonInfo.draggable  = buttons[j].$dockData.draggable;
                         
                         if(buttons[j].$dockData["class"])
                             buttonInfo["class"] = buttons[j].$dockData["class"];
@@ -84,6 +89,9 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
             
             bar = bar.previousSibling;
         }
+        
+        if(changed)
+            state.changed = true;
         
         return state;
     };
@@ -118,6 +126,9 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
             this.clearState();
 
         var bars = obj.bars,
+            visSectionsCount = 0,
+            visBtnCount,
+            sections,
             bar;
             
         for (var i = 0; i < bars.length; i++) {
@@ -128,7 +139,7 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
                 bar.$dockData = bars[i];
             }
             
-            var sections = bars[i].sections;
+            sections = bars[i].sections;
             
             for (var j = 0; j < sections.length; j++) {
                 var section = null, 
@@ -145,6 +156,7 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
                         info = section.$dockData;
                     }
                 }
+                
                 if (!section) {
                     section = this.$addSection(bar, bar.childNodes[sections[j].options.position], sections[j].sectionIdent, sections[j]);
                     info = sections[j];
@@ -152,10 +164,12 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
                     section.$menu = menu;
                     menu.firstChild.setAttribute("flex", info.flex);
                     menu.setAttribute("width", info.width || 260);
-                    menu.setAttribute("height", info.height || 300);
+                    if(info.height)
+                        menu.setAttribute("height", info.height);
                 }
-
+                
                 var buttons = sections[j].buttons;
+                visBtnCount = 0;
                 for (var k = 0; k < buttons.length; k++) {
                     var button = this.$addButton(section, menu, 
                         this.$addPage(
@@ -166,8 +180,21 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
                         ), apf.extend(buttons[k], this.$cbFindOptions(buttons[k].ext) || {})
                     );
                     button.$dockData = buttons[k];
+                    
+                    this.buttonEls.push(button);
+                    
+                    if(!button.hidden)
+                        visBtnCount++;
                 }
+                
+                if(visBtnCount > 0)
+                    visSectionsCount++;
+                else
+                    section.hide();
             }
+            
+            if(!visSectionsCount)
+                bar.hide();
             
             if (bars[i].expanded)
                 this.expandBar(bar);
@@ -177,21 +204,48 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
     /**
      * Destroy full state
      */
-    this.clearState = function(){
+    this.clearState = function(soft){
         var bar = this.$parentHBox.lastChild;
         while (bar) {
             if (bar.localName == "bar" && bar.dock) {
                 var sections = bar.selectNodes("vbox");
                 for (var i = 0; i < sections.length; i++) {
-                    var buttons = sections[i].selectNodes("button");
+                    var section = sections[i];
+                    var buttons = section.selectNodes("button");
                     var menu = self[buttons[0].submenu];
-                    
                     for (var j = 0; j < buttons.length; j++) {
-                        //Store pages
-                        this.$cbStorePage(buttons[j].$dockpage);
+                        var button = buttons[j];
+                        if(soft) {
+                            //button.destroy(true, true);
+                           // button.parentNode.removeChild(button);
+                        }
+                        else {
+                            //Store pages
+                            this.$cbStorePage(button.$dockpage);
+                        }
                     }
                     
-                    menu.destroy(true, true);
+                    if(soft) {
+                        var tabs = menu.selectNodes("tab"),
+                            tab, pages, page;
+                        for(var j = 0; j < tabs.length; j++){
+                            tab   = tabs[j];
+//                            pages = tab.selectNodes("a:page");
+//                            for(var k = 0; k < pages.length; k++) {
+//                                page = pages[k];
+//                                page.removeEventListener("beforedrag", arguments.callee);
+//                                page.removeEventListener("afterclose", arguments.callee);
+//                                page.removeEventListener("prop.visible", arguments.callee);
+//                            }
+                            tab.destroy(false, true);
+                        }
+                        menu.destroy(false, true);
+//                        section.destroy(true, true);
+                        //menu.parentNode.removeChild(menu);
+//                        section.parentNode.removeChild(section);
+                    }
+                    else
+                        menu.destroy(true, true);
                 }
             }
             else if (!bar.bar) {
@@ -199,7 +253,13 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
             }
             
             var next = bar.previousSibling;
-            bar.destroy(true, true);
+               
+            if(!soft || (soft && bar.vbox))
+                bar.destroy(true, true);
+            else {
+                bar.vbox && bar.vbox.destroy(false, true);
+                bar.destroy(false, true);
+            }
             bar = next;
         }
     };
@@ -227,6 +287,128 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
         }, true);
     };
     
+    this.showSection = function(idnt, expand){
+        var _self = this,
+            bar, section,
+            barToExp = [];
+        
+        if(typeof idnt == "string")
+            idnt = [idnt];
+        
+        for(var i = 0, l = this.buttonEls.length; i < l; i++) {
+            var button = this.buttonEls[i];
+            if(!button.$dockData || !button.$dockData.ext || (!idnt.contains(button.$dockData.ext[0]) && !idnt.contains(button.$dockData.ext[1])))
+                continue;
+
+            section = button.parentNode;
+            if(section) {
+                if(!section.visible)
+                    section.show();
+
+                bar = section.parentNode;
+                if(!bar.visible)
+                    bar.show();
+
+                if(expand) {
+                    bar.expanded = true;
+                    barToExp.push(bar);
+                }
+            }
+            
+            button.show();
+            if(!self[button.$dockData.ext[1]].visible)
+                self[button.$dockData.ext[1]].show();
+            
+            if(!self[button.$dockData.ext[1]].parentNode.visible);
+                self[button.$dockData.ext[1]].parentNode.show();
+        }
+        
+        setTimeout(function(){
+            for(var i = 0, l = barToExp.length; i < l; i++)
+                _self.expandBar(barToExp[i]);
+        });
+            
+        
+    };
+    
+    this.hideSection = function(idnt){
+        var bar, section, dontHide;
+
+        for(var i = 0, l = this.buttonEls.length; i < l; i++) {
+            var button = this.buttonEls[i];
+            if(!button.$dockData || !idnt.contains(button.$dockData.ext[0]))
+                continue;
+            
+            button.hide();
+            
+            if(self[button.submenu])
+                self[button.submenu].hide();
+            
+            section = button.parentNode;
+            if(section) {
+                if(section.visible && section.selectNodes('button[@visible="true"]').length == 0)
+                    section.hide();
+
+                bar = section.parentNode;
+
+                //for some reason this does not give what is expected bar.selectNodes('vbox[@visible!="false"]') so we loop
+                var vboxes = bar.selectNodes('vbox');
+                for(var u = 0, l2 = vboxes.length; u < l2; u++) {
+                    if(vboxes[u].getAttribute('visible') !== false)
+                        dontHide = true;
+                }
+
+                if(!dontHide && bar.visible)
+                    bar.hide();
+            }
+            dontHide = false;
+        }
+
+        var expandedVboxes = this.$parentHBox.selectNodes('vbox'),
+            childNodes, childNode;
+            
+        for(var i = 0, l = expandedVboxes.length; i < l; i++) {
+            var expBox = expandedVboxes[i];
+            if(!expBox.bar.vbox.expanded)
+                continue;
+            childNodes = expBox.childNodes;
+            dontHide = false;
+            
+            for(var u = 0, l2 = childNodes.length; u < l2; u++) {
+                childNode = childNodes[u];
+                if(!childNode || !childNode.extId)
+                    continue;
+
+                if(!idnt.contains(childNode.extId))
+                    dontHide = true;
+                else
+                    childNode.hide();
+            }
+            
+            if(!dontHide) {
+                var vbox = expBox.bar.selectNodes("vbox");
+                var tabs = expBox.bar.vbox.selectNodes("tab");
+                for (var i = 0; i < vbox.length; i++) {
+                    var menu = self[vbox[i].selectSingleNode("button").submenu];
+                    menu.appendChild(tabs[i]);
+                }
+
+                expBox.previousSibling.hide();
+                expBox.hide();
+//                this.collapseBar(expBox.bar);
+                
+                expBox.previousSibling.hide();
+                expBox.hide();
+                
+                var vboxParent = expBox.parentNode;
+                vboxParent.removeChild(expBox.previousSibling);
+                vboxParent.removeChild(expBox);
+                
+                delete expBox.bar.vbox;
+            }
+        }
+    };
+    
     /**
      * Expand a bar
      */
@@ -235,6 +417,8 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
             this.$currentMenu.hide();
         
         if (!bar.vbox) {
+            if(!bar.parentNode)
+                debugger;
             var _self = this;
             bar.vbox = bar.parentNode.insertBefore(new apf.vbox({
                 padding   : 0,
@@ -257,7 +441,7 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
                     })
                 ]
             }), bar);
-            
+
             //style hack
             //bar.vbox.$ext.style.borderLeft = "1px solid #333";
             
@@ -277,23 +461,40 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
         }
         
         var vbox = bar.selectNodes("vbox");
+        var countVis = 0;
         
         for (var i = 0; i < vbox.length; i++) {
-            var menu = self[vbox[i].selectSingleNode("button").submenu];
+            var button  = vbox[i].selectSingleNode("button"),
+                menu    = self[button.submenu],
+                childEl = menu.firstChild;
+
             menu.hide();
-            var childEl = menu.firstChild;
-            bar.vbox.appendChild(childEl);
-            if (!childEl.flex && childEl.tagName != "bar")
-                childEl.setAttribute("flex", 1);           
+            
+            if(childEl && button.visible) {
+                childEl.extId = button.$dockData.ext[0];
+                bar.vbox.appendChild(childEl);
+                if (!childEl.flex && childEl.tagName != "bar" && !childEl.noflex)
+                    childEl.setAttribute("flex", 1);           
+                countVis++;
+            }
         }
         
-        bar.hide();
-        bar.vbox.show();
-        bar.splitter.show();
-        
-        //Hack for button
-        bar.vbox.firstChild.$ext.onmousemove({});
-        
+        if(countVis > 0 || bar.expanded) {
+            bar.hide();
+            bar.vbox.show();
+            bar.vbox.expanded = true; 
+            bar.expanded = true;
+            bar.splitter.show();
+
+            //Hack for button
+            bar.vbox.firstChild.$ext.onmousemove({});
+        }
+        else {
+            bar.vbox.hide();
+            bar.vbox.expanded = false;
+            bar.expanded = false;
+            bar.splitter.hide();
+        }
         this.$cbChange();
     };
     
@@ -305,7 +506,7 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
             this.$currentMenu.hide();
         
         var vbox = bar.selectNodes("vbox");
-        var tabs = bar.vbox.selectNodes("bar|tab");
+        var tabs = bar.vbox.selectNodes("tab");
         for (var i = 0; i < vbox.length; i++) {
             var menu = self[vbox[i].selectSingleNode("button").submenu];
             menu.appendChild(tabs[i]);
@@ -313,6 +514,8 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
         
         bar.show();
         bar.vbox.hide();
+        bar.vbox.expanded = false;
+        bar.expanded = false;
         bar.splitter.hide();
         
         bar.parentNode.removeChild(bar.vbox);
@@ -320,7 +523,6 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
         
         //Hack for button
         bar.firstChild.$ext.onmousemove({});
-        
         this.$cbChange();
     };
     
@@ -330,6 +532,13 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
      */
     this.show = function(amlNode){
         var button = amlNode.$dockbutton || amlNode;
+        if(!button.visible) {
+            this.showSection(amlNode.id);
+            var buttonSiblings = button.parentNode.selectNodes("button");
+            for(var i = 0; i < buttonSiblings.length; i++)
+                this.showSection(buttonSiblings[i].$dockData.ext[1]);
+        }
+        
         //button.showMenu();
         button.dispatchEvent("mousedown", {htmlEvent: {}});
     };
@@ -347,6 +556,7 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
         while (lastBar && lastBar.previousSibling 
           && (lastBar.previousSibling.localName == "bar" 
           && lastBar.previousSibling.dock
+          && lastBar.previousSibling .visible
           || lastBar.previousSibling.bar))
             lastBar = lastBar.previousSibling;
         if (lastBar.localName != "bar")
@@ -363,7 +573,7 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
      */
     this.$startDrag = function (dragged, original){
         var last, state = 0, _self = this;
-        
+
         apf.setOpacity(dragged.$ext, 0.3);
         
         var lastBar   = this.$getLastBar();
@@ -479,7 +689,7 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
                             + (info.position == "before_button" ? 0 : aml.$ext.offsetHeight) 
                             - 8) + "px";
                         div.style.width = "100%";
-                        div.style.borderBottom = "3px solid #5c5c5c";
+                        div.style.borderBottom = "3px solid rgba(122,199,244,0.8)";
                     }
                     
                     break;
@@ -493,11 +703,10 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
                 case "before_page":
                     var pNode = aml.parentNode;
                     var pos2 = apf.getAbsolutePosition(pNode.$ext);
-                    indicator.style.left = pos2[0] + "px";
-                    indicator.style.top  = (pos2[1] + 3) + "px";
-                    width = pNode.$ext.offsetWidth;
-                    height = pNode.$ext.offsetHeight;
-                    
+                    indicator.style.left = (pos2[0] + (!lastBar.expanded ? -3 : 0)) + "px";
+                    indicator.style.top  = (pos2[1] + (!lastBar.expanded ? -2 : 3)) + "px";
+                    width = pNode.$ext.offsetWidth + (!lastBar.expanded ? 6 : 0);
+                    height = pNode.$ext.offsetHeight + (!lastBar.expanded ? 11 : 0);
                     indicator.style.borderWidth = "3px 3px 3px 3px";
                     
                     var compareAml = info.position == "before_page" 
@@ -513,29 +722,30 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
                         var div1 = indicator.firstChild;
                         var div2 = indicator.childNodes[1];
                         var div3 = indicator.childNodes[2];
-                        div1.style.left = (diff[0] - 6) + "px";
+                        div1.style.left = (diff[0] - (!lastBar.expanded ? 3 : 6)) + "px";
                         div1.style.width = (matchAml.$button.offsetWidth - 1) + "px";
-                        div1.style.height = "20px";
-                        div1.style.margin = "-19px 0 0 0px";
-                        div1.style.border = "3px solid #5c5c5c";
+                        div1.style.height = "18px";
+                        div1.style.margin = "-21px 0 0 0px";
+                        div1.style.border = "3px solid rgba(122,199,244,0.5)";
                         div1.style.borderWidth = "3px 3px 0 3px";
                         
-                        div2.style.left = (diff[0] + matchAml.$button.offsetWidth - 3) + "px";
+                        div2.style.left = (diff[0] + matchAml.$button.offsetWidth - 4) + "px";
                         div2.style.right = "0px";
                         div3.style.borderBottom =
-                        div2.style.borderBottom = "3px solid #5c5c5c";
+                        div2.style.borderBottom = "3px solid rgba(122,199,244,0.5)";
                         
                         div3.style.left = "0px";
                         div3.style.right = (width - diff[0] - 4) + "px";
                         
                         indicator.style.borderTop = "0px solid #5c5c5c";
-                        indicator.style.top = (pos2[1] + 22) + "px";
-                        height -= 24;
+                        indicator.style.borderColor = "rgba(122,199,244,0.5)";
+                        indicator.style.top = (pos2[1] + (!lastBar.expanded ? 19 : 24)) + "px";
+                        height -= 26 + (!lastBar.expanded ? 1 : 0);
                         width  -= 1;
                     }
                     else {
                         indicator.innerHTML = "<div style='position:absolute;'><div></div></div>";
-                        indicator.firstChild.style.height = "19px";
+                        indicator.firstChild.style.height = !lastBar.expanded ? "22px" : "19px";
                         indicator.firstChild.style.width = "5px";
                         indicator.firstChild.style.background = "rgba(122,199,244,0.5)";
                         indicator.firstChild.style.top = "0px";
@@ -545,6 +755,7 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
                         
                         var left = (diff[0] + 
                             (info.position == "before_page" ? 0 : aml.$button.offsetWidth));
+
                         if (left)
                             left -= 5;
                         else {
@@ -552,7 +763,7 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
                             indicator.firstChild.firstChild.style.marginLeft = "0px";
                         }
                         indicator.firstChild.style.left = left + "px";
-                        height -= 5;
+                        height -= 7;
                         width  -= 1;
                     }
                     break;
@@ -587,7 +798,7 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
                     
                     var div = indicator.firstChild;
                     div.style.top = "100%";
-                    div.style.borderTop = "3px solid #5c5c5c"
+                    div.style.borderTop = "3px solid rgba(122,199,244,0.8)"
                     div.style.height = (dragged.localName == "vbox" ? dragged.$ext.offsetHeight : 50) + "px";
                     div.style.background = "rgba(172,172,172,0.5)";
                     div.style.width = "100%";
@@ -883,7 +1094,6 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
         whiledrag();
         apf.removeListener(document, "mousemove", whiledrag);
         
-        
         var indicator = this.indicator;
         var info = lastInfo;//calcAction(e);
         var aml  = info && info.aml;
@@ -956,7 +1166,6 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
                 var section = this.$addSection(bar, null, null, original && original.$dockData);
                 var submenu = this.$addMenu(section);
                 var dragAml = whiledrag.original;
-                
                 this.$moveTo(submenu, dragAml, aml, null, section, info.position);
                 break;
             case "right_of_column":
@@ -984,8 +1193,8 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
     this.$moveTo = function(submenu, dragAml, aml, beforeButton, parentNode, position, tab, pNode, ignoreEvent){
         var beforePage = beforeButton && beforeButton.$dockpage;
         
-        if (dragAml.localName == "page" || dragAml.localName == "button") {
-            if (dragAml.localName == "page") {
+        if (dragAml.localName == "page" || dragAml.localName == "button" || dragAml.localName == "hbox") {
+            if (dragAml.localName == "page" || dragAml.localName == "hbox") {
                 var page = dragAml;
                 var button = dragAml.$dockbutton;
             }
@@ -1004,17 +1213,17 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
                 return;
     
             button.setAttribute("submenu", submenu.id);
-//            if(submenu.id == 'mnuRunCommands')
-//            debugger;
+
             var newPNode = tab || submenu.firstChild;
             if (newPNode) {
                 newPNode.insertBefore(page, beforePage);
                 
                 if (!newPNode.getPages || newPNode.getPages().length == 1) {
                 	var mnu = self[page.$dockbutton.submenu];
-                	mnu.setAttribute("width", oldMenu.width);
-                	mnu.setAttribute("height", oldMenu.height);
-                	
+                    if(mnu) {
+                        mnu.setAttribute("width", oldMenu.width);
+                        mnu.setAttribute("height", oldMenu.height);
+                	}
                     var totalFlex = 0, count = 0;
                     if (newPNode.parentNode.localName == "vbox") {
                         newPNode.parentNode.selectNodes("tab").each(function(tab){ 
@@ -1023,16 +1232,18 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
                         });
                     }
                     else {
-                        var tabs = parentNode.parentNode.selectNodes("vbox").each(function(vbox){
+                        var vboxes = parentNode.parentNode.selectNodes("vbox");
+                        vboxes.each(function(vbox){  
                             var button = vbox.selectSingleNode("button");
                             totalFlex += button && self[button.submenu].firstChild.flex || 1;
                             count++;
                         });
                     }
-                    newPNode.setAttribute("flex", totalFlex/count);
+                    if(!newPNode.height)
+                        newPNode.setAttribute("flex", totalFlex/count);
                 }
             }
-    
+
             //add button to section
             parentNode.insertBefore(button, beforeButton);
     
@@ -1055,7 +1266,7 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
             var buttons = dragAml.parentNode.selectNodes("button");
             for (var i = buttons.length - 1; i >= 0; i--) {
                 var button = buttons[i];
-                
+//                if(button.visible)
                 this.$moveTo(submenu, button, aml, beforeButton, parentNode, position, tab, pNode, true)
             }
         }
@@ -1079,31 +1290,33 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
             dockOpt = section.$dockData.options || {},
             menuId  = dockOpt.id || "submenu" + menuCounter++;
 
-        if(!dockOpt.noTab) {
+//        if(!dockOpt.noTab) {
             childNodes = [
                 new apf.tab({
-                    anchors : "5 4 4 4", 
-                    skin : "docktab",
+                    anchors : dockOpt.noTab ? "1 -7 0 4" : "5 4 4 4", 
+                    skin : dockOpt.noTab ? "dockbar" : "docktab",
                     buttons : "scale, close",
                     dock    : 1,
+                    height  : section.$dockData.height || "", 
                     activepage : 0,
+                    noflex  : section.$dockData.noflex,
                     onclose : function(e){
                         var page = e.page;
                         page.lastParent = this;
                     }
                 })
             ];
-        }
-        else {
-            childNodes = [
-                new apf.bar({
-                    skin: "basic",
-                    "class": "runbtns",
-                    dock: 1,
-                    anchors : "1 4 4 4"
-                })
-            ]
-        }
+//        }
+//        else {
+//            childNodes = [
+//                new apf.bar({
+//                    skin: "basic",
+//                    "class": "runbtns",
+//                    dock: 1,
+//                    anchors : "1 4 4 4"
+//                })
+//            ]
+//        }
         
         var menu = new apf.menu({
             id : menuId,
@@ -1120,7 +1333,7 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
                     _self.$currentMenu.hide();
                 _self.$currentMenu = this;
                 
-                var menu  = this;
+//                var menu  = this;
                 var pos   = apf.getAbsolutePosition(menu.opener.$ext);
                 var width = apf.getWindowWidth();
                 var dist  = menu.$ext.offsetWidth > width - pos[0] //Weird bug - chrome only??
@@ -1134,7 +1347,7 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
                     menu.$ext.style.right = (width - pos[0] + 6) + "px";
                     menu.$ext.style.left = "";
                     menu.$ext.style.zIndex = "9999";
-                    if(menu.opener.$dockData && menu.opener.$dockData.caption) {
+                    if(menu.opener && menu.opener.$dockData && menu.opener.$dockData.caption) {
                         var btnPos = apf.getAbsolutePosition(menu.opener.$ext),
                             arrow;
                         if(typeof menu.$ext.getElementsByClassName == "function" && (arrow = menu.$ext.getElementsByClassName("arrow")[0])) {
@@ -1145,7 +1358,7 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
                 
             },
             onafterresize : function(){
-                var menu = this;
+//                var menu = this;
                 setTimeout(function() {
                     var pos = apf.getAbsolutePosition(menu.opener.$ext);
                     var width = apf.getWindowWidth();
@@ -1157,9 +1370,9 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
             childNodes : childNodes
         });
         
-        if(dockOpt.noTab) {
-            tbDebugNav.show();
-        }
+//        if(dockOpt.noTab) {
+////            tbDebugNav.show();
+//        }
         
         apf.document.body.appendChild(menu);
         menu.show();
@@ -1200,7 +1413,6 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
      */
     this.$addPage = function(page, menu, caption, name){
         var _self = this;
-        
         if (!page)
             page = menu.firstChild.add(caption, name);
         else
@@ -1210,98 +1422,103 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
         page.dock  = 1;
         page.setAttribute("draggable", true);
         
-        var beforeDrag;
-        page.addEventListener("beforedrag", beforeDrag = function (e){ //change this to beforedrag and recompile apf
-            var origMenu = self[this.$dockbutton.submenu];
-            /*var menu = origMenu.cloneNode(false);
-            menu.removeAttribute("id");
-            apf.document.body.appendChild(menu);*/
+        var beforeDrag;        
+        
+        if(!page.hasEventListener("beforedrag")) {  
+            page.addEventListener("beforedrag", beforeDrag = function (e){ //change this to beforedrag and recompile apf
+                var origMenu = self[this.$dockbutton.submenu];
+                /*var menu = origMenu.cloneNode(false);
+                menu.removeAttribute("id");
+                apf.document.body.appendChild(menu);*/
 
-            var tab = this.parentNode.cloneNode(false);
-            tab.removeAttribute("id");
-            tab.removeAttribute("activepage");
-            tab.setAttribute("buttons", "close"); //@todo bug in scale that doesnt resize 
-            tab.removeAttribute("anchors");
-            apf.document.body.appendChild(tab);
-            tab.setWidth(this.parentNode.$ext.offsetWidth);
-            tab.setHeight(this.parentNode.$ext.offsetHeight);
-            
-            var page = this.cloneNode(true);
-            page.removeAttribute("id");
-            page.removeAttribute("render");
-            tab.appendChild(page);
+                var tab = this.parentNode.cloneNode(false);
+                tab.removeAttribute("id");
+                tab.removeAttribute("activepage");
+                tab.setAttribute("buttons", "close"); //@todo bug in scale that doesnt resize 
+                tab.removeAttribute("anchors");
+                apf.document.body.appendChild(tab);
+                tab.setWidth(this.parentNode.$ext.offsetWidth);
+                tab.setHeight(this.parentNode.$ext.offsetHeight);
 
-            /*if (origMenu.$ext.offsetHeight) {
-                var pos = apf.getAbsolutePosition(origMenu.$ext);
-                tab.setLeft(pos[0]);
-                tab.setTop(pos[1]);
-            }
-            else {*/
-                var pos = apf.getAbsolutePosition(this.parentNode.$ext);
-                tab.setLeft(pos[0] - 1);
-                tab.setTop(pos[1] - 2);
-            //}
-            
-            tab.$ext.style.border = "1px solid #333";
-            //menu.$ext.style.margin = "0 0 0 0"
-            tab.addEventListener("afterdrag", function(e){
-                tab.id = tab.name = ""; //@todo fix this bug in apf
-                tab.destroy(true, true);
-                _self.$stopDrag(e.htmlEvent);
-                
-                tab.removeEventListener("afterdrag", arguments.callee);
-            });
-            
-            //document instead?
-            var clientX = e.htmlEvent.clientX;
-            var clientY = e.htmlEvent.clientY;
-            tab.setAttribute("draggable", true);
-            setTimeout(function(){
-                //@todo Collapse menu
-                
-                tab.$dragStart({clientX:clientX,clientY:clientY});
-                tab.$ext.style.zIndex = 1000000;
-            });
-        
-            _self.$startDrag(tab, this);
-        
-            return false;
-        });
-        
-        page.addEventListener("afterclose", function(e){
-            var button = this.$dockbutton;
-            var pNode = this.lastParent;
-            var btnPNode = button.parentNode;
-        
-            button.destroy(true, true);
-            
-            this.removeNode();
-            
-            if (!pNode.getPages || !pNode.getPages().length) {
-                var barParent = btnPNode.parentNode;
-                if (pNode.parentNode.localName == "menu")
-                    pNode.parentNode.destroy(true, true);
-                else {
-                    var menu = self[button.submenu];
-                    menu.destroy(true, true);
-                    pNode.destroy(true, true);
+                var page = this.cloneNode(true);
+                page.removeAttribute("id");
+                page.removeAttribute("render");
+                tab.appendChild(page);
+
+                /*if (origMenu.$ext.offsetHeight) {
+                    var pos = apf.getAbsolutePosition(origMenu.$ext);
+                    tab.setLeft(pos[0]);
+                    tab.setTop(pos[1]);
                 }
-                btnPNode.destroy(true, true);
-                if (!barParent.selectNodes("vbox").length) {
-                    barParent.destroy(true, true);
-                    if (barParent.vbox) {
-                        barParent.vbox.destroy(true, true);
-                        barParent.splitter.destroy(true, true);
+                else {*/
+                    var pos = apf.getAbsolutePosition(this.parentNode.$ext);
+                    tab.setLeft(pos[0] - 1);
+                    tab.setTop(pos[1] - 2);
+                //}
+
+                tab.$ext.style.border = "1px solid #333";
+                //menu.$ext.style.margin = "0 0 0 0"
+                tab.addEventListener("afterdrag", function(e){
+                    tab.id = tab.name = ""; //@todo fix this bug in apf
+                    tab.destroy(true, true);
+                    _self.$stopDrag(e.htmlEvent);
+
+                    tab.removeEventListener("afterdrag", arguments.callee);
+                });
+
+                //document instead?
+                var clientX = e.htmlEvent.clientX;
+                var clientY = e.htmlEvent.clientY;
+                tab.setAttribute("draggable", true);
+                setTimeout(function(){
+                    //@todo Collapse menu
+
+                    tab.$dragStart({clientX:clientX,clientY:clientY});
+                    tab.$ext.style.zIndex = 1000000;
+                });
+
+                _self.$startDrag(tab, this);
+
+                return false;
+            });
+        }
+        
+        if(!page.hasEventListener("afterclose")) {        
+            page.addEventListener("afterclose", function(e){
+                var button = this.$dockbutton;
+                var pNode = this.lastParent;
+                var btnPNode = button.parentNode;
+
+                button.destroy(true, true);
+
+                this.removeNode();
+
+                if (!pNode.getPages || !pNode.getPages().length) {
+                    var barParent = btnPNode.parentNode;
+                    if (pNode.parentNode.localName == "menu")
+                        pNode.parentNode.destroy(true, true);
+                    else {
+                        var menu = self[button.submenu];
+                        menu.destroy(true, true);
+                        pNode.destroy(true, true);
+                    }
+                    btnPNode.destroy(true, true);
+                    if (!barParent.selectNodes("vbox").length) {
+                        barParent.destroy(true, true);
+                        if (barParent.vbox) {
+                            barParent.vbox.destroy(true, true);
+                            barParent.splitter.destroy(true, true);
+                        }
                     }
                 }
-            }
 
-            _self.$cbStorePage(this);
+                _self.$cbStorePage(this);
 
-            page.removeEventListener("beforedrag", beforeDrag);
-            page.removeEventListener("afterclose", arguments.callee);
-            return false
-        });
+                page.removeEventListener("beforedrag", beforeDrag);
+                page.removeEventListener("afterclose", arguments.callee);
+                return false
+            });
+        }
 
         return page;
     };
@@ -1331,12 +1548,14 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
             edge : "0 0 3 0",
             "class" : "docksection",
             value : ident,
-            dock    : 1,
+            dock    : sectionOpt.draggable === false ? "" : 1,
+            draggable : sectionOpt.draggable || "true",
             childNodes : [
                 new apf.divider({
-                    skin : "divider-debugpanel",
-                    margin : "3 4 2 2",
-                    dock    : 1,
+                    skin      : "divider-debugpanel",
+                    margin    : "3 4 2 2",
+                    dock      : sectionOpt.draggable === false ? "" : 1,
+                    visible   : sectionOpt.draggable || "true",
                     draggable : sectionOpt.draggable || "true"
                 })
             ]
@@ -1416,16 +1635,21 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
      */
     this.$addButton = function(section, submenu, page, options){
         var _self  = this, btnLock, tmp;
+        var drag = true; 
+        if(typeof options.draggable != "undefined" )
+            drag = false;
         
         var button = section.appendChild(new apf.button({
             skin    : "dockButton",
             submenu : submenu.id,
-            dock    : 1,
+            dock    : drag ? 1 : "",
+            visible : options && options.hidden ? !options.hidden : true, 
             "class" : options["class"] || "",
-            draggable : "true",
+            draggable : drag,
             onmousedown  : function(){
                 btnLock = true;
-                self[this.submenu].firstChild.set && self[this.submenu].firstChild.set(page);
+                
+                self[this.submenu].firstChild && self[this.submenu].firstChild.set && self[this.submenu].firstChild.set(page);
                 btnLock = false;
                 
                 if (options && (tmp = options.primary)) {
@@ -1443,11 +1667,14 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
             }
         }));
         
-        if(options["id"])
+        if(options && options["id"])
             button.setAttribute('id', options["id"]);
         
         if (options && (tmp = options.primary)) {
             var span = button.$ext.getElementsByTagName("span");
+            
+            button.setAttribute("tooltip", options.menu.split("/").pop());
+            
             span[2].style.background = 'url("' 
                 + tmp.backgroundImage + '") '
                 + tmp.defaultState.x + 'px '
@@ -1474,7 +1701,7 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
         page.addEventListener("prop.visible", function(e) {
 //            _self.resetNotificationCount(winIdent);
 
-            if (!btnLock && e.value && this.$ext.offsetWidth) // && this.parentNode.parentNode.localName == "menu") // & !_self.expanded
+            if (self[button.submenu] && !btnLock && e.value && this.$ext.offsetWidth) // && this.parentNode.parentNode.localName == "menu") // & !_self.expanded
                 button.showMenu();
                 
             if(e.value == true && options && options.cbOnPageShow)
@@ -1528,7 +1755,7 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
     
         page.$dockbutton = button;
         button.$dockpage = page;
-    
+        button.hidden = options && options.hidden;
         return button;
     }
 }).call(DockableLayout.prototype);

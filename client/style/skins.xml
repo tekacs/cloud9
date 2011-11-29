@@ -46,14 +46,6 @@
         .basic{
             position : relative;
         }
-        .dockwin_runbtns .basic {
-            
-        }
-        
-        .expandedpanel .basic.runbtns {
-            border-bottom: 1px solid #000000;
-            box-shadow: 0 1px 0 #505053;
-        }
     ]]></a:style>
 
     <a:presentation>
@@ -4641,7 +4633,7 @@
             position: absolute;
             right: -39px;
             top: 1px;
-            width: 212px;
+            width: 184px;
         }
         
         .dockwin_runbtns .dockwin_runbtns-bg .dockwin_runbtns-icon {
@@ -4654,17 +4646,11 @@
         }
     ]]></a:style>
     
-    <a:style condition="apf.isSafari || apf.isChrome"><![CDATA[
-        .dockwin_runbtns {
-            margin-top : 13px;
-        }
-    ]]></a:style>
-    
     <a:presentation>
         <a:main container=".">
             <div class="dockwin_runbtns">
                 <div class="dockwin_runbtns-bg" onmousedown="apf.findHost(this).hide()">
-                    <div class="dockwin_runbtns-icon"></div>
+                    <div class="dockwin_runbtns-icon"> </div>
                 </div>
             </div>
         </a:main>
@@ -7637,6 +7623,63 @@
         </a:page>
     </a:presentation>
 </a:tab>
+<a:tab name="dockbar">
+    <a:style><![CDATA[
+        .dockbar {
+            position:relative;
+            overflow: visible;
+        }
+        
+        .expandedpanel .dockbar {
+            border-bottom: 1px solid #000000;
+            box-shadow: 0 1px 0 #505053;
+        }
+        
+        .dockcol .dockbar {
+            
+        }
+        
+        .dockbar .btncontainer{
+            display: none;
+        }
+
+        .dockbar .page {
+            display : none;
+        }
+
+        .dockcol .dockbar .page {
+            
+        }
+
+        .dockbar .page.curpage{
+            display : block;
+        }
+    ]]></a:style>
+    <a:style condition="apf.isWebkit"><![CDATA[
+        
+    ]]></a:style>
+    <a:presentation>
+        <a:main pages="." buttons="div[1]">
+            <div class="dockbar">
+                <div class="btncontainer"> </div>
+            </div>
+        </a:main>
+        <a:button
+          caption   = "div[1]/text()"
+          container = "."
+          maxwidth  = "100"
+          minwidth  = "10">
+            <div class="btntab">
+            </div>
+        </a:button>
+        <a:btnclose>
+            <strong> </strong>
+        </a:btnclose>
+        <a:page container=".">
+            <div class="page"> </div>
+        </a:page>
+    </a:presentation>
+</a:tab>
 <a:tab name="docktab">
     <a:style><![CDATA[
         .docktab {
@@ -7693,6 +7736,7 @@
         }
 
         .docktab .btncontainer .btntab {
+            float: left;
             padding       : 3px 2px 4px;
             position      : relative;
             text-align    : center;
@@ -7715,6 +7759,10 @@
             -moz-border-radius-topright: 4px;
             border-top-left-radius: 4px;
             border-top-right-radius: 4px;*/
+        }
+
+        .expandedpanel .docktab .btncontainer .btntab {
+            padding-top: 2px;
         }
 
         /*.docktab .btncontainer div.firstbtn {
@@ -7812,13 +7860,21 @@
             background-position : 0 0;
             top: 4px;
         }
-
+        
         .docktab .btncontainer .curbtn.btnclose strong:hover {
             background-position : -14px 0;
         }
 
         .docktab .btncontainer .curbtn.btnclose strong:active {
             background-position : -28px 0;
+        }
+        
+        .expandedpanel .docktab .btncontainer .btnclose strong {
+            top: 4px;
+        }
+        
+        .expandedpanel .docktab .btncontainer .curbtn.btnclose strong {
+            top: 3px;
         }
         
         .dockcol .docktab .noise_bg {
@@ -9066,43 +9122,43 @@
         </a:presentation>
     </a:errorbox>
 
-	<a:img name="img">
+    <a:img name="img">
         <a:style><![CDATA[
-			.img{
-				overflow: auto;
-			}
-
+            .img{
+                overflow: auto;
+            }
+            
             .img div {
-				width : 100%;
-				height : 100%;
-				display: -moz-box;
-				display: -webkit-box;
-				-moz-box-orient: horizontal;
-				-webkit-box-orient: horizontal;
-				box-orient: horizontal;
-				-moz-box-pack: center;
-				-webkit-box-pack: center;
-				box-pack: center;
-				-moz-box-align: center;
-				-webkit-box-align: center;
-				box-align: center;
+                width : 100%;
+                height : 100%;
+                display: -moz-box;
+                display: -webkit-box;
+                -moz-box-orient: horizontal;
+                -webkit-box-orient: horizontal;
+                box-orient: horizontal;
+                -moz-box-pack: center;
+                -webkit-box-pack: center;
+                box-pack: center;
+                -moz-box-align: center;
+                -webkit-box-align: center;
+                box-align: center;
             }
-
+            
             .img IMG {
-				display: block;
+                display: block;
             }
-
-			.img span{
-				display:block;
-			}
+            
+            .img span{
+                display:block;
+            }
         ]]></a:style>
-
+            
         <a:presentation>
             <a:main image="div/span/img/@src">
                 <div class="img">
-					<div>
-                    	<span><img src="" /></span>
-					</div>
+                    <div>
+                        <span><img src="" /></span>
+                    </div>
                 </div>
             </a:main>
         </a:presentation>
