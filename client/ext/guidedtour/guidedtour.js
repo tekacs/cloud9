@@ -254,7 +254,7 @@ module.exports = ext.register("ext/guidedtour/guidedtour", {
     {
         if (position == "top")
         {
-             div.setAttribute("bottom", (window.innerHeight - posArray[1]) + 25);
+             div.setAttribute("bottom", (window.innerHeight - posArray[1]) + 100);
              div.setAttribute("left", (posArray[0] + (posArray[2]/2)) - (div.getWidth()/2));
         }
         else if (position == "right")
@@ -264,13 +264,13 @@ module.exports = ext.register("ext/guidedtour/guidedtour", {
         }
         else if (position == "bottom")
         {
-            div.setAttribute("top", posArray[3] + 25);   
+            div.setAttribute("top", posArray[3]);
             div.setAttribute("right", (posArray[0] + (posArray[2]/2)) - (div.getWidth()/2));
         }
         else if (position == "left")
         {
-            div.setAttribute("top", (posArray[1] + (posArray[3]/2)) + 50);
-            div.setAttribute("right", (posArray[0] + (posArray[1]/2) + 45));
+            div.setAttribute("bottom", posArray[3] - 125);
+            div.setAttribute("right", (posArray[2]) - 25);
         }  
         
         return div;
