@@ -580,7 +580,7 @@ module.exports = ext.register("ext/console/console", {
     /**** Init ****/
 
     hook : function(){
-        panels.register(this);
+        panels.register(this, mnuWindows);
         panels.initPanel(this);
     },
 
