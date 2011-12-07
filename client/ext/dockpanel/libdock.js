@@ -1440,6 +1440,7 @@ var DockableLayout = module.exports = function(parentHBox, cbFindPage, cbStorePa
 
         var _self = this;
         var bar   = this.$parentHBox.insertBefore(new apf.bar({
+            id   : "debugPanelCompact",
             skin : "debug-panel",
             dock : 1,
             onDOMNodeRemovedFromDocument : function(){
