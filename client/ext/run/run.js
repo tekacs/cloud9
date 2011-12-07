@@ -145,7 +145,7 @@ module.exports = ext.register("ext/run/run", {
         lstRunCfg.select(cfg);
         winRunCfgNew.show();
     },
-
+    
     showRunConfigs : function(debug) {
         mdlRunConfigurations.data.setAttribute("debug", debug ? "1": "0");
         winRunCfgNew.show();
@@ -202,6 +202,11 @@ module.exports = ext.register("ext/run/run", {
         }
     },
 
+    selectLastConfig : function(cfg) {
+        var configs = mdlRunConfigurations.queryNodes("config");
+        lstRunCfg.select(configs[configs.length -1]);
+    },
+    
     runConfig : function(config, debug) {
         var model = settings.model;
         var saveallbeforerun = model.queryValue("general/@saveallbeforerun");
